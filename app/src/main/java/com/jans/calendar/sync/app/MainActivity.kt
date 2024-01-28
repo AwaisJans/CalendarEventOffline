@@ -1,14 +1,14 @@
 package com.jans.calendar.sync.app
 
 import android.Manifest
+import android.accounts.Account
 import android.accounts.AccountManager
 import android.annotation.SuppressLint
 import android.app.Dialog
 import android.app.ProgressDialog
+import android.content.ClipData
 import android.content.ContentResolver
-import android.content.ContentUris
 import android.content.ContentValues
-import android.database.ContentObserver
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -54,14 +54,25 @@ class MainActivity : AppCompatActivity() {
 
 
         val addUtil: () -> Unit = {
+
+
             val calendars = getCalendars()
             val calendarIds = mutableListOf<Long>()
             for (calendar in calendars) {
                 Log.d("how123", calendar.accountName.toString())
-
                 calendarIds.add(calendar.calendarId)
+                addEvents(calendar.calendarId, calendar.accountName.toString(), data)
             }
-            addEvents(1, data)
+            val pd = ProgressDialog(this)
+            pd.setTitle("Adding Events")
+            pd.setMessage("Adding Events if not added then check Google Calendar App after 4 to 5 Minutes")
+
+
+            pd.show()
+            Handler(Looper.getMainLooper()).postDelayed({
+                pd.dismiss()
+                showToast("Event added successfully")
+            }, 3000)
         }
 
 
@@ -73,7 +84,11 @@ class MainActivity : AppCompatActivity() {
 
     private var customDialog: Dialog? = null
 
-    private fun addEvents(calendarId: Long, events: List<CalendarEvent>): List<Boolean> {
+    private fun addEvents(
+        calendarId: Long,
+        email: String,
+        events: List<CalendarEvent>
+    ): List<Boolean> {
         val results = mutableListOf<Boolean>()
         var eventAdded: Boolean?
         for (event in events) {
@@ -90,31 +105,22 @@ class MainActivity : AppCompatActivity() {
             val uri = contentResolver.insert(CalendarContract.Events.CONTENT_URI, values)
             eventAdded = uri != null
 
-            results.add(eventAdded)
-
-            val accounts = AccountManager.get(this).accounts
-            Log.d("hows123", "Refreshing " + accounts.size + " accounts")
             val authority = CalendarContract.Calendars.CONTENT_URI.authority
-            for (i in accounts.indices) {
-                Log.d("hows123", "Refreshing calendars for: " + accounts[i])
-                val extras = Bundle()
-                extras.putBoolean(ContentResolver.SYNC_EXTRAS_MANUAL, true)
-                ContentResolver.requestSync(accounts[i], authority, extras)
+            val extras = Bundle()
+            val accountType = "com.google"
+            val acc = Account(email, accountType)
+
+            val accounts: ArrayList<Account> = ArrayList<Account>()
+            accounts.add(acc)
+
+            extras.putBoolean(ContentResolver.SYNC_EXTRAS_MANUAL, true)
+            for (i in 0 until 10) {
+                for (account in accounts) {
+                    ContentResolver.requestSync(account, authority, extras)
+                }
             }
-
-            val pd = ProgressDialog(this)
-            pd.setTitle("Adding Events")
-            pd.setMessage("Adding Events if not added then check Google Calendar App after 4 to 5 Minutes")
-
-            pd.show()
-            Handler(Looper.getMainLooper()).postDelayed({
-                pd.dismiss()
-                showToast("Event added successfully")
-            }, 3000)
-
-
+            results.add(eventAdded)
         }
-
 
 //        customDialog = Dialog(this)
 //        val dialogB = CustomDialogLayoutBinding.inflate(layoutInflater)
@@ -203,17 +209,6 @@ class MainActivity : AppCompatActivity() {
                 val calendarInfo =
                     CalendarInfo(calendarId, accountName, displayName, ownerAccount)
                 calendars.add(calendarInfo)
-                val cr: ContentResolver = contentResolver
-                val values = ContentValues()
-                values.put(CalendarContract.Calendars.SYNC_EVENTS, 1)
-                values.put(CalendarContract.Calendars.VISIBLE, 1)
-
-                cr.update(
-                    ContentUris.withAppendedId(uri, calendarId),
-                    values,
-                    null,
-                    null
-                )
 
                 Log.d("myCalendarInfo", calendars.toString())
 
